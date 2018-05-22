@@ -1,0 +1,12 @@
+target/
+project/
+.idea
+*.MF
+classes
+
+### macOS template
+*.DS_Store
+*.pdf
+
+
+*.txt
