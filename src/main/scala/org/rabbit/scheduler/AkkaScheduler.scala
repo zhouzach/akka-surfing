@@ -1,25 +1,51 @@
 package org.rabbit.scheduler
 
-import akka.actor.{ActorSystem, Props}
+import java.io.File
+import java.util.TimeZone
+
+import akka.actor.Props
+import ch.qos.logback.classic.LoggerContext
+import ch.qos.logback.classic.joran.JoranConfigurator
 import com.typesafe.akka.extension.quartz.QuartzSchedulerExtension
-import com.typesafe.config.ConfigFactory
+import org.rabbit.config.SchedulerConf
+import org.slf4j.LoggerFactory
 
-object AkkaScheduler extends App {
+object AkkaScheduler {
 
-  val config = ConfigFactory.parseString(
-    s"""
-       |akka.http.server.remote-address-header = on
-    """.stripMargin)
-    .withFallback(ConfigFactory.load())
+  def main(args: Array[String]): Unit = {
 
-  implicit val system = ActorSystem("itoa", config)
+    // have to config logback, otherwise never log
+    initLogConfig()
 
-  val scheduler = QuartzSchedulerExtension(system)
+    import org.rabbit.config.Init.system
+    val worker = system.actorOf(Props[WorkerActor])
+    val scheduler = QuartzSchedulerExtension(system)
 
-  val worker = system.actorOf(Props[WorkerActor])
+    scheduler.createSchedule(
+      "job1",
+      cronExpression = SchedulerConf.apply.expression(),
+//      calendar = Some("akka.quartz.calendars.HourOfTheWolf"),
+      timezone = TimeZone.getDefault
+//        timezone = TimeZone.getTimeZone("GMT+8:00")
+//        timezone = TimeZone.getTimeZone("Asia/Shanghai")
+    )
+    scheduler.schedule("job1", worker, Tick())
 
-  scheduler.createSchedule("job1",
-    cronExpression = ConfigFactory.load().getString("akka.quartz.schedules.Every30Seconds.expression"))
-  scheduler.schedule("job1", worker, Tick)
+  }
+
+  private def initLogConfig(): Unit = {
+    val logConfig = new File("./logback.xml")
+
+    if (logConfig.exists() && logConfig.canRead) {
+      val logContext = LoggerFactory.getILoggerFactory.asInstanceOf[LoggerContext]
+
+      val config = new JoranConfigurator()
+      config.setContext(logContext)
+
+      logContext.reset()
+
+      config.doConfigure(logConfig)
+    }
+  }
 
 }
